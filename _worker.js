@@ -62,9 +62,37 @@ export default {
 			const url = new URL(request.url);
 			if (!upgradeHeader || upgradeHeader !== 'websocket') {
 				// const url = new URL(request.url);
+				const now = Date.now();
+				const timestamp = Math.floor(now / 1000);
+				const today = new Date(now);
+				today.setHours(0, 0, 0, 0);
 				switch (url.pathname) {
 				case '/':
 					return new Response(JSON.stringify(request.cf), { status: 200 });
+				case `/clash/${userID}`: {
+					const vlessConfig = await getVLESSConfigWithAgent(userID, request.headers.get('Host'), sub, RproxyIP, "clash");
+					return new Response(`${vlessConfig}`, {
+						status: 200,
+						headers: {
+							"Content-Disposition": "attachment; filename=edgetunnel; filename*=utf-8''edgetunnel",
+							"Content-Type": "text/plain;charset=utf-8",
+							"Profile-Update-Interval": "6",
+							"Subscription-Userinfo": `upload=0; download=${Math.floor(((now - today.getTime())/86400000) * 24 * 1099511627776)}; total=${24 * 1099511627776}; expire=${timestamp}`,
+						}
+					});
+				}
+				case `/singbox/${userID}`: {
+					const vlessConfig = await getVLESSConfigWithAgent(userID, request.headers.get('Host'), sub, RproxyIP, "singbox");
+					return new Response(`${vlessConfig}`, {
+						status: 200,
+						headers: {
+							"Content-Disposition": "attachment; filename=edgetunnel; filename*=utf-8''edgetunnel",
+							"Content-Type": "text/plain;charset=utf-8",
+							"Profile-Update-Interval": "6",
+							"Subscription-Userinfo": `upload=0; download=${Math.floor(((now - today.getTime())/86400000) * 24 * 1099511627776)}; total=${24 * 1099511627776}; expire=${timestamp}`,
+						}
+					});
+				}
 				case `/${userID}`: {
 					const vlessConfig = await getVLESSConfig(userID, request.headers.get('Host'), sub, userAgent, RproxyIP);
 					const now = Date.now();
@@ -948,5 +976,38 @@ async function getVLESSConfig(userID, hostName, sub, userAgent, RproxyIP) {
 			console.error('Error fetching content:', error);
 			return `Error fetching content: ${error.message}`;
 		}
+	}
+}
+
+async function getVLESSConfigWithAgent(userID, hostName, sub, RproxyIP, agent) {
+  if (typeof fetch != 'function') {
+  	return 'Error: fetch is not available in this environment.';
+  }
+  // 如果是使用默认域名，则改成一个workers的域名，订阅器会加上代理
+  if (hostName.includes(".workers.dev") || hostName.includes(".pages.dev")){
+  	fakeHostName = `${fakeHostName}.${generateRandomString()}${generateRandomNumber()}.workers.dev`;
+  } else {
+  	fakeHostName = `${fakeHostName}.${generateRandomNumber()}.xyz`
+  }
+  let url="";
+  let content = "";
+  let isBase64 = false;
+	if (agent === 'clash') {
+		url = `https://${subconverter}/sub?target=clash&url=https%3A%2F%2F${sub}%2Fsub%3Fhost%3D${fakeHostName}%26uuid%3D${fakeUserID}%26edgetunnel%3Dcmliu%26proxyip%3D${RproxyIP}&insert=false&config=${encodeURIComponent(subconfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
+	} else if (agent === 'sing-box' || agent === 'singbox') {
+	  url = `https://${subconverter}/sub?target=singbox&url=https%3A%2F%2F${sub}%2Fsub%3Fhost%3D${fakeHostName}%26uuid%3D${fakeUserID}%26edgetunnel%3Dcmliu%26proxyip%3D${RproxyIP}&insert=false&config=${encodeURIComponent(subconfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
+	} else {
+		return `unknown agent: ${agent}`;
+	}
+	try {
+		const response = await fetch(url ,{
+		headers: {
+			'User-Agent': 'CF-Workers-edgetunnel/cmliu'
+		}});
+		content = await response.text();
+		return revertFakeInfo(content, userID, hostName, isBase64);
+	} catch (error) {
+		console.error('Error fetching content:', error);
+		return `Error fetching content: ${error.message}`;
 	}
 }
